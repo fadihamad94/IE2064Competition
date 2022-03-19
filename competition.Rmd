@@ -1,0 +1,121 @@
+---
+title: "Competition"
+author: "Fadi Hamad"
+date: "3/18/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages and data
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library(caret)
+library(lattice)
+library(pls)
+library(tidyverse)
+library(elasticnet)
+library(corrplot)
+library(ggplot2)
+library(Metrics)
+library(readr)
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+raw_data <- read_csv("competition-data.csv")
+raw_data
+```
+
+## Density Plot
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+density_plot <- ggplot(raw_data, aes(x=outcome)) + 
+  geom_density()
+density_plot
+```
+## Investigate the missing values
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+head(raw_data %>% filter(is.na(outcome)))
+```
+
+## Removing all rows with NAs
+  
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+# remove all rows with NAs
+drop_na_raw_data <- raw_data %>% drop_na()
+```
+
+## Batch transformation
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+predictors_only <- select(drop_na_raw_data, -outcome)
+# Change predictors_only from tible to data.frame as 
+# preProcess only accepts dataframes
+df_predictors_only <- data.frame(predictors_only) 
+modifiedData_preprocessing_fit <- preProcess(
+  df_predictors_only, 
+  method = c("BoxCox", "center", "scale"))
+modifiedData_preprocessing_fit
+```
+
+## The dataset after preprocessing
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+transformed_predictors <- predict(
+  modifiedData_preprocessing_fit, df_predictors_only)
+
+preprocessed_data <- add_column(transformed_predictors, 
+     outcome = drop_na_raw_data$outcome)
+
+head(preprocessed_data)
+```
+
+## Set up cross validation
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+set.seed(100)
+number_train <- floor(0.7 * nrow(preprocessed_data))
+training_indicies <- sample(1:nrow(preprocessed_data), number_train)
+train <- preprocessed_data[training_indicies,]
+validate <- preprocessed_data[-training_indicies,]
+
+folds <- createFolds(train$outcome, k = 5, returnTrain = TRUE)
+ctrl <- trainControl(method = "cv", index = folds)
+```
+
+## Remove highly correlated predictors
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+tooHigh <- findCorrelation(cor(train), cutoff = .9)
+trainXnnet <- train[, -tooHigh]
+validatennet <- validate[, -tooHigh]
+
+training_data_predicators <- trainXnnet %>% select(-outcome)
+training_data_outcome <- trainXnnet %>% select(outcome)
+```
+
+## One Layer Neural Network Model
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+nnetGrid <- expand.grid(
+  decay = c(5.0, 20.0, 80.0),
+  size = c(1, 2, 3)
+)                        
+set.seed(100)
+nnetTuneWeightDecay <- train(training_data_predicators, training_data_outcome$outcome,
+                             method = "nnet",
+                             tuneGrid = nnetGrid,
+                             trControl = ctrl,
+                             linout = TRUE,
+                             trace = FALSE
+                             )
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+min(nnetTuneWeightDecay$results$RMSE)
+ggplot(nnetTuneWeightDecay)
+```
