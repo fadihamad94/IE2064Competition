@@ -19,15 +19,16 @@ library(tidyverse)
 library(elasticnet)
 library(corrplot)
 library(ggplot2)
-library(Metrics)
+#library(Metrics)
 library(readr)
 ```
 
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
 raw_data <- read_csv("competition-data.csv")
-raw_data
+head(raw_data)
 ```
 
+# Reviewing the Data
 ## Density Plot
 
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
@@ -35,9 +36,51 @@ density_plot <- ggplot(raw_data, aes(x=outcome)) +
   geom_density()
 density_plot
 ```
+## Histogram 
+```{r}
+plot.histogram <- raw_data %>%
+  ggplot(aes(outcome))+
+  geom_histogram(bins = 20, color = "black", fill = "blue", alpha = .4)
+plot.histogram
+```
+## predictor varaition 
+```{r}
+predictor.var <- raw_data %>%
+  select(-outcome) %>%
+  summarise_all(funs(sd)) 
+#predictor.var
+
+low.var <- predictor.var %>%
+  select_if(colSums(predictor.var)<10)
+low.var
+
+only.high.var.predictors <- raw_data %>%
+  select(-X1,-X6,-X7,-X14)
+```
+  + Since predictors with low variance have less predictive value and con over fit models (esppecially nueral networks), we could consider dropping the 4 predictors with the least variation.
+  
+## Percent of 0 outcomes
+```{r}
+num.zero <- raw_data %>%
+  filter(outcome==0) %>%
+  summarise(count = n())
+
+per.zero <- num.zero/nrow(raw_data)
+
+data.frame(Count.Zero = num.zero,
+           Percent.Zero = per.zero)
+```
+  + Could try dropping rows with outcomes of 0 to improve predictions of non-zero. Then predict 3.5% of outcomes as 0 artificially. My not work, I just remember using this technique in my simulations class. 
+  
+# PreProccing the data
+
 ## Investigate the missing values
 
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
+Total.Missing <- raw_data%>%
+  summarise(sum(is.na(across(everything()))))
+Total.Missing
+
 head(raw_data %>% filter(is.na(outcome)))
 ```
 
@@ -73,19 +116,6 @@ preprocessed_data <- add_column(transformed_predictors,
 head(preprocessed_data)
 ```
 
-## Set up cross validation
-
-```{r, warning=FALSE, message=FALSE, echo=FALSE}
-set.seed(100)
-number_train <- floor(0.7 * nrow(preprocessed_data))
-training_indicies <- sample(1:nrow(preprocessed_data), number_train)
-train <- preprocessed_data[training_indicies,]
-validate <- preprocessed_data[-training_indicies,]
-
-folds <- createFolds(train$outcome, k = 5, returnTrain = TRUE)
-ctrl <- trainControl(method = "cv", index = folds)
-```
-
 ## Remove highly correlated predictors
 
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
@@ -95,6 +125,23 @@ validatennet <- validate[, -tooHigh]
 
 training_data_predicators <- trainXnnet %>% select(-outcome)
 training_data_outcome <- trainXnnet %>% select(outcome)
+```
+
+# Model Buidling
+## Set up cross validation
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+set.seed(100)
+number_train <- floor(0.7 * nrow(preprocessed_data))
+training_indicies <- sample(1:nrow(preprocessed_data), number_train)
+train <- preprocessed_data[training_indicies,]
+validate <- preprocessed_data[-training_indicies,]
+
+folds <- createFolds(train$outcome, 
+                     k = 5, 
+                     returnTrain = TRUE)
+ctrl <- trainControl(method = "cv",
+                     index = folds)
 ```
 
 ## One Layer Neural Network Model
@@ -118,4 +165,50 @@ nnetTuneWeightDecay <- train(training_data_predicators, training_data_outcome$ou
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
 min(nnetTuneWeightDecay$results$RMSE)
 ggplot(nnetTuneWeightDecay)
+```
+
+## Tree Based Models 
+
+```{r}
+
+rf_gid <- data.frame(mtry = c(2,4,6,8,10,12))
+
+rand_tree_model <- train(x = training_data_predicators,
+                         y = training_data_outcome$outcome,
+                         tuneGrid = rf_gid,
+                         method = "rf", 
+                         ntree = 50,
+                         importance = TRUE,
+                         trControl = ctrl)
+```
+
+```{r}
+ggplot(rand_tree_model)
+rf.min.rmse<-min(rand_tree_model$results$RMSE)
+print(paste0("Min RMSE: ",rf.min.rmse,", at K = 6 and 50 trees"))
+```
+
+## Support Vector Machine
+
+```{r}
+svmRTuned <- train(x = training_data_predicators,
+                   y = training_data_outcome$outcome,
+                   method = "svmRadial",
+                   # preProc = c("center", "scale"),
+                   tuneLength = 8,
+                   epsilon = .005,
+                   trControl = ctrl)
+```
+
+```{r}
+epsilons <- data.frame(RMSE = c(run.001,run.005,run.01,run.05,run.1),
+                       Epsolion = c(.001,.005,.01,.05,.1))
+```
+```{r}
+epsilons %>%
+  ggplot(aes(y=RMSE,x=Epsolion,color=as.character(4)))+
+  geom_line()+
+  labs(title = "RMSE vs Epsilon", color = "C")
+
+print(paste0("The best Model has a RMSE of: ",run.005,", at C=4 and epsolin = .005"))
 ```
