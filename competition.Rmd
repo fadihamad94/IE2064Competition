@@ -116,6 +116,24 @@ preprocessed_data <- add_column(transformed_predictors,
 head(preprocessed_data)
 ```
 
+## Set up cross validation
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+set.seed(100)
+number_train <- floor(0.7 * nrow(preprocessed_data))
+training_indicies <- sample(1:nrow(preprocessed_data), number_train)
+train <- preprocessed_data[training_indicies,]
+validate <- preprocessed_data[-training_indicies,]
+validate_predictors <- validate %>%
+  select(-outcome)
+
+folds <- createFolds(train$outcome, 
+                     k = 5, 
+                     returnTrain = TRUE)
+ctrl <- trainControl(method = "cv",
+                     index = folds)
+```
+
 ## Remove highly correlated predictors
 
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
@@ -128,21 +146,6 @@ training_data_outcome <- trainXnnet %>% select(outcome)
 ```
 
 # Model Buidling
-## Set up cross validation
-
-```{r, warning=FALSE, message=FALSE, echo=FALSE}
-set.seed(100)
-number_train <- floor(0.7 * nrow(preprocessed_data))
-training_indicies <- sample(1:nrow(preprocessed_data), number_train)
-train <- preprocessed_data[training_indicies,]
-validate <- preprocessed_data[-training_indicies,]
-
-folds <- createFolds(train$outcome, 
-                     k = 5, 
-                     returnTrain = TRUE)
-ctrl <- trainControl(method = "cv",
-                     index = folds)
-```
 
 ## One Layer Neural Network Model
 
@@ -185,24 +188,31 @@ rand_tree_model <- train(x = training_data_predicators,
 ```{r}
 ggplot(rand_tree_model)
 rf.min.rmse<-min(rand_tree_model$results$RMSE)
-print(paste0("Min RMSE: ",rf.min.rmse,", at K = 6 and 50 trees"))
+print(paste0("Min RMSE: ",rf.min.rmse,", at K = 6 or 8 and 50 trees"))
+```
+  + Predictions 
+```{r}
+rf.predictions <- predict(rand_tree_model, validate_predictors)
+rf.test.rmse <- RMSE(rf.predictions, validate$outcome)
+rf.test.rmse
 ```
 
 ## Support Vector Machine
-
+  + The smv model
 ```{r}
 svmRTuned <- train(x = training_data_predicators,
                    y = training_data_outcome$outcome,
                    method = "svmRadial",
-                   # preProc = c("center", "scale"),
                    tuneLength = 8,
                    epsilon = .005,
                    trControl = ctrl)
 ```
 
+  + RMSE vs. Epsilon
 ```{r}
 epsilons <- data.frame(RMSE = c(run.001,run.005,run.01,run.05,run.1),
                        Epsolion = c(.001,.005,.01,.05,.1))
+#will have to rerun the svm models because I did not save the rmse of models with differnet eposolins
 ```
 ```{r}
 epsilons %>%
@@ -211,4 +221,11 @@ epsilons %>%
   labs(title = "RMSE vs Epsilon", color = "C")
 
 print(paste0("The best Model has a RMSE of: ",run.005,", at C=4 and epsolin = .005"))
+```
+
+  + Predictions 
+```{r}
+smv.predictions <- predict(svmRTuned, validate_predictors)
+svm.test.rmse <- RMSE(smv.predictions, validate$outcome)
+svm.test.rmse
 ```
