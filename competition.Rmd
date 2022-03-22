@@ -185,47 +185,107 @@ rand_tree_model <- train(x = training_data_predicators,
                          trControl = ctrl)
 ```
 
+  + Models vs the  training RMSE
 ```{r}
-ggplot(rand_tree_model)
-rf.min.rmse<-min(rand_tree_model$results$RMSE)
-print(paste0("Min RMSE: ",rf.min.rmse,", at K = 6 or 8 and 50 trees"))
+ggplot(rand_tree_model)+
+  labs(title = "K vs. RMSE")
 ```
-  + Predictions 
+  
+ + Best Random Forest Model
 ```{r}
-rf.predictions <- predict(rand_tree_model, validate_predictors)
+rf.min.rmse<-min(rand_tree_model$results$RMSE)
+
+as.data.frame(rand_tree_model$results) %>%
+  filter(RMSE == rf.min.rmse) %>%
+  select(mtry,RMSE)
+
+print(paste0("Min Train RMSE: ",rf.min.rmse))
+```
+  + Predictions and test RMSE
+```{r}
+rf.predictions <- predict(rand_tree_model, validatennet)
 rf.test.rmse <- RMSE(rf.predictions, validate$outcome)
-rf.test.rmse
+print(paste0("Test RMSE: ",rf.test.rmse))
 ```
 
 ## Support Vector Machine
   + The smv model
 ```{r}
+svm.grid <- expand.grid(.sigma = c(.001,.01,.1,1,10), .C = c(5,10,15,20))
 svmRTuned <- train(x = training_data_predicators,
                    y = training_data_outcome$outcome,
                    method = "svmRadial",
-                   tuneLength = 8,
-                   epsilon = .005,
+                   preProc = c("center", "scale"),
+                   #tuneLength = 6,
+                   tuneGrid = svm.grid,
                    trControl = ctrl)
+                   
 ```
-
-  + RMSE vs. Epsilon
+  
+  + Best svm model
 ```{r}
-epsilons <- data.frame(RMSE = c(run.001,run.005,run.01,run.05,run.1),
-                       Epsolion = c(.001,.005,.01,.05,.1))
-#will have to rerun the svm models because I did not save the rmse of models with differnet eposolins
+min.svm.rmse <- min(svmRTuned$results$RMSE)
+
+best.svm.rmse <- as.data.frame(svmRTuned$result) %>%
+  filter(min.svm.rmse==RMSE) %>%
+  select(sigma,C,RMSE)
+
+best.svm.rmse
 ```
+ 
+  + RMSE vs. Sigma and Cost
 ```{r}
-epsilons %>%
-  ggplot(aes(y=RMSE,x=Epsolion,color=as.character(4)))+
-  geom_line()+
-  labs(title = "RMSE vs Epsilon", color = "C")
-
-print(paste0("The best Model has a RMSE of: ",run.005,", at C=4 and epsolin = .005"))
+ggplot(svmRTuned)+
+  scale_x_log10()+
+  labs(title = "Model vs. RMSE")
 ```
 
   + Predictions 
+ - can not get the svm function to make predictions -
 ```{r}
-smv.predictions <- predict(svmRTuned, validate_predictors)
-svm.test.rmse <- RMSE(smv.predictions, validate$outcome)
-svm.test.rmse
+
+#smv.predictions <- predict(object = svmRTuned, newdata=validatennet)
+
+#svm.test.rmse <- RMSE(smv.predictions, validate)
+#svm.test.rmse
+
 ```
+
+## Multivariate Adaptive Regression Spline
+
+```{r,warning=FALSE, error=FALSE, message=FALSE}
+
+mars_grid <- expand.grid(.degree = c(1,2),
+                         .nprune = c(7,10,13,16,19,26))
+
+mars_model <- train(x = training_data_predicators,
+                   y = training_data_outcome$outcome,
+                   method = "earth",
+                   tuneGrid = mars_grid,
+                   trControl = ctrl)
+```
+
+  + Models vs the  training RMSE
+```{r}
+ggplot(mars_model)+
+  labs(title = "K vs. RMSE")
+```
+  
+ + Best Random Forest Model
+```{r}
+mars.min.rmse<-min(mars_model$results$RMSE)
+
+as.data.frame(mars_model$results)%>%
+  filter(RMSE == mars.min.rmse) %>%
+  select(degree,nprune,RMSE)
+
+print(paste0("Min Train RMSE: ",mars.min.rmse))
+```
+ 
+  + Predictions and test RMSE
+```{r}
+mars.predictions <- predict(mars_model, validatennet)
+mars.test.rmse <- RMSE(mars.predictions, validate$outcome)
+print(paste0("Test RMSE: ",mars.test.rmse))
+```
+
