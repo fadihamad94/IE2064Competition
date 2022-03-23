@@ -169,6 +169,12 @@ nnetTuneWeightDecay <- train(training_data_predicators, training_data_outcome$ou
 min(nnetTuneWeightDecay$results$RMSE)
 ggplot(nnetTuneWeightDecay)
 ```
+  + Neural Network Predictions and Test RMSE
+```{r}
+nnet.predictions <- predict(nnetTuneWeightDecay, validatennet)
+nnnet.test.rmse <- RMSE(nnet.predictions, validate$outcome)
+print(paste0("Test RMSE: ",nnnet.test.rmse))
+```
 
 ## Tree Based Models 
 
@@ -242,6 +248,7 @@ ggplot(svmRTuned)+
 
   + Predictions 
  - can not get the svm function to make predictions -
+ - but the train RMSE is already high so it probably a bad choice - 
 ```{r}
 
 #smv.predictions <- predict(object = svmRTuned, newdata=validatennet)
@@ -265,13 +272,13 @@ mars_model <- train(x = training_data_predicators,
                    trControl = ctrl)
 ```
 
-  + Models vs the  training RMSE
+  + Models vs the training RMSE
 ```{r}
 ggplot(mars_model)+
-  labs(title = "K vs. RMSE")
+  labs(title = "Degree and Terms vs. RMSE")
 ```
   
- + Best Random Forest Model
+ + Best MARS Model
 ```{r}
 mars.min.rmse<-min(mars_model$results$RMSE)
 
